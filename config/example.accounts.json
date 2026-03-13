@@ -1,0 +1,16 @@
+{
+  "accounts": [
+    {
+      "email": "work@company.com"
+    },
+    {
+      "email": "personal@gmail.com"
+    }
+  ],
+  "tool_access": {
+    "preset": "standard",
+    "overrides": {
+      "gmail_delete_label": false
+    }
+  }
+}
