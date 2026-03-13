@@ -10,7 +10,7 @@
   "tool_access": {
     "preset": "standard",
     "overrides": {
-      "gmail_create_draft": true
+      "gmail_delete_label": false
     }
   }
 }

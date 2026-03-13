@@ -41,7 +41,7 @@ def _save_token(email: str, creds: Credentials) -> None:
     avoiding a window where the file is world-readable.
     """
     path = _token_path(email)
-    path.parent.mkdir(parents=True, exist_ok=True)
+    os.makedirs(path.parent, mode=0o700, exist_ok=True)
     fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, stat.S_IRUSR | stat.S_IWUSR)
     try:
         os.write(fd, creds.to_json().encode())
@@ -103,8 +103,8 @@ def _refresh_if_needed(creds: Credentials, email: str | None = None) -> Credenti
     if creds.valid:
         return creds
 
-    if creds.expired and creds.refresh_token:
-        logger.info("Refreshing expired token%s", f" for {email}" if email else "")
+    if creds.refresh_token:
+        logger.info("Refreshing token%s", f" for {email}" if email else "")
         creds.refresh(Request())
         if email:
             _save_token(email, creds)

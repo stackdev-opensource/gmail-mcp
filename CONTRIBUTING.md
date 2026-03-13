@@ -7,7 +7,7 @@ Thank you for your interest in contributing! This document provides guidelines f
 1. Fork the repository
 2. Clone your fork: `git clone https://github.com/YOUR_USERNAME/gmail-mcp.git`
 3. Create a branch: `git checkout -b feature/your-feature-name`
-4. Install in development mode: `pip install -e ".[dev]"`
+4. Install in development mode: `uv pip install -e ".[dev]"`
 
 ## Development Guidelines
 
@@ -23,16 +23,16 @@ Thank you for your interest in contributing! This document provides guidelines f
 This project handles sensitive email data. All contributions must:
 
 - **Never** introduce email sending capability — draft creation is the maximum write access
-- **Never** write credentials or tokens to disk — use macOS Keychain via `keyring`
+- **Never** write credentials with world-readable permissions — token files must use `600` permissions
 - **Always** wrap untrusted content (email bodies, subjects, sender names) in XML-style delimiters
 - **Always** log tool invocations for audit purposes
 - **Never** log full email content — only argument keys and metadata
 
 ### Commit Messages
 
-- Use clear, concise commit messages
-- Start with a verb: "Add", "Fix", "Update", "Remove"
-- Reference issues when applicable: "Fix #42: handle expired OAuth tokens"
+- Use [conventional commits](https://www.conventionalcommits.org/) (enforced by pre-commit hook)
+- Format: `feat: add label support`, `fix: handle expired OAuth tokens`, `chore: update deps`
+- Reference issues when applicable: `fix: handle expired OAuth tokens (#42)`
 
 ### Pull Requests
 
@@ -44,7 +44,7 @@ This project handles sensitive email data. All contributions must:
 
 ## Reporting Bugs
 
-- Use the [bug report template](.github/ISSUE_TEMPLATE/bug_report.md)
+- Use the [bug report template](.github/ISSUE_TEMPLATE/bug_report.yml)
 - Include steps to reproduce, expected behavior, and actual behavior
 - **Never** include OAuth tokens, client secrets, or email content in bug reports
 

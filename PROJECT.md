@@ -61,7 +61,8 @@ All untrusted content (email bodies, subjects, sender names, snippets) is wrappe
 def sanitize_email_content(email: dict) -> dict:
     email["body"] = f"<email_body>\n{email['body']}\n</email_body>"
     email["subject"] = f"<email_subject>{email['subject']}</email_subject>"
-    email["from"] = f"<email_sender>{email['from']}</email_sender>"
+    email["from"] = f"<email_from>{email['from']}</email_from>"
+    email["to"] = f"<email_to>{email['to']}</email_to>"
     email["snippet"] = f"<email_snippet>{email['snippet']}</email_snippet>"
     return email
 ```

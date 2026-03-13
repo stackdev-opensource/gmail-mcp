@@ -88,9 +88,15 @@ def cmd_auth(args: argparse.Namespace) -> None:
 
     config = _resolve_config(args)
 
-    # Apply preset so scope resolution picks up the right tools
+    # Apply preset and tool overrides so scope resolution picks up the right tools
     if args.preset:
         config["tool_access"]["preset"] = args.preset
+    if args.enable_tools:
+        for tool in args.enable_tools:
+            config["tool_access"]["overrides"][tool] = True
+    if args.disable_tools:
+        for tool in args.disable_tools:
+            config["tool_access"]["overrides"][tool] = False
 
     from gmail_mcp.access_control import get_enabled_tools, get_required_scopes
     from gmail_mcp.auth import run_oauth_flow
@@ -164,6 +170,20 @@ def main() -> None:
         choices=["read-only", "standard"],
         default=None,
         help="Tool access preset — determines which OAuth scopes to request (default: read-only)",
+    )
+    auth_parser.add_argument(
+        "--enable-tool",
+        action="append",
+        dest="enable_tools",
+        metavar="TOOL_NAME",
+        help="Enable a specific tool for scope resolution (can be repeated)",
+    )
+    auth_parser.add_argument(
+        "--disable-tool",
+        action="append",
+        dest="disable_tools",
+        metavar="TOOL_NAME",
+        help="Disable a specific tool for scope resolution (can be repeated)",
     )
 
     # -- serve subcommand --

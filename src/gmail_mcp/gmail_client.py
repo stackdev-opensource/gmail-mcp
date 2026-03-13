@@ -51,6 +51,8 @@ class GmailClient:
             def _cb(request_id, response, exception):  # noqa: ANN001, ARG001
                 if exception is None:
                     fetched[index] = response
+                else:
+                    logger.warning("Batch fetch failed for message %s: %s", request_id, exception)
 
             return _cb
 
