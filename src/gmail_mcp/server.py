@@ -79,7 +79,7 @@ async def call_tool(name: str, arguments: dict) -> list[TextContent]:
     except HttpError as e:
         # Gmail API error — return status and reason without leaking internals
         logger.exception("Gmail API error in %s", name)
-        raise ValueError(f"Gmail API error ({e.status_code}): {e.reason}") from None
+        raise ValueError(f"Gmail API error ({e.resp.status}): {e.reason}") from None
     except GoogleAuthError:
         # Auth error — never leak token details
         logger.exception("Authentication error in %s", name)

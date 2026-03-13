@@ -42,6 +42,8 @@ def _save_token(email: str, creds: Credentials) -> None:
     """
     path = _token_path(email)
     os.makedirs(path.parent, mode=0o700, exist_ok=True)
+    # Enforce 700 even if directory already existed with lax permissions
+    os.chmod(path.parent, 0o700)
     fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, stat.S_IRUSR | stat.S_IWUSR)
     try:
         os.write(fd, creds.to_json().encode())
@@ -150,6 +152,8 @@ def run_oauth_flow(
     email: str,
     client_secrets_path: str | None,
     scopes: list[str],
+    *,
+    show_credentials: bool = False,
 ) -> Credentials:
     """Run the interactive browser OAuth flow and save the token.
 
@@ -172,15 +176,22 @@ def run_oauth_flow(
     print(f"Authenticated {email} successfully.", file=sys.stderr)
     print(f"Token saved to {_token_path(email)}", file=sys.stderr)
 
-    # Show env var option
-    suffix = _env_key(email)
-    print(
-        "\nTo use environment variables instead (for Docker/CI/MCP client config):",
-        file=sys.stderr,
-    )
-    print(f"  GMAIL_CLIENT_ID={creds.client_id}", file=sys.stderr)
-    print(f"  GMAIL_CLIENT_SECRET={creds.client_secret}", file=sys.stderr)
-    print(f"  GMAIL_REFRESH_TOKEN_{suffix}={creds.refresh_token}", file=sys.stderr)
-    print("\n  (GMAIL_REFRESH_TOKEN also works for single-account setups)", file=sys.stderr)
+    if show_credentials:
+        suffix = _env_key(email)
+        print(
+            "\nTo use environment variables instead (for Docker/CI/MCP client config):",
+            file=sys.stderr,
+        )
+        print(f"  GMAIL_CLIENT_ID={creds.client_id}", file=sys.stderr)
+        print(f"  GMAIL_CLIENT_SECRET={creds.client_secret}", file=sys.stderr)
+        print(f"  GMAIL_REFRESH_TOKEN_{suffix}={creds.refresh_token}", file=sys.stderr)
+        print(
+            "\n  (GMAIL_REFRESH_TOKEN also works for single-account setups)", file=sys.stderr
+        )
+    else:
+        print(
+            "\nTo get env vars for Docker/CI, re-run with --show-credentials",
+            file=sys.stderr,
+        )
 
     return creds

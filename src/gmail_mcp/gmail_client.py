@@ -268,13 +268,8 @@ class GmailClient:
                 html_body = base64.urlsafe_b64decode(part["body"]["data"]).decode(errors="replace")
             elif mime_type.startswith("multipart/"):
                 nested = self._extract_body(part)
-                if nested and nested != "(no body content)":
-                    # Nested result wins over what we have at this level,
-                    # since the inner multipart/alternative is the real content
-                    if not text_body:
-                        text_body = nested
-                    if not html_body and nested.startswith("<"):
-                        html_body = nested
+                if nested and nested != "(no body content)" and not text_body:
+                    text_body = nested
 
         return text_body or html_body or "(no body content)"
 

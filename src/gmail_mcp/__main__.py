@@ -107,7 +107,7 @@ def cmd_auth(args: argparse.Namespace) -> None:
     for account in config["accounts"]:
         email = account["email"]
         print(f"\nAuthenticating {email}...", file=sys.stderr)
-        run_oauth_flow(email, args.client_secrets, scopes)
+        run_oauth_flow(email, args.client_secrets, scopes, show_credentials=args.show_credentials)
 
     print("\nAll accounts authenticated. You can now run:", file=sys.stderr)
     account_flags = " ".join(f"--account {a['email']}" for a in config["accounts"])
@@ -184,6 +184,12 @@ def main() -> None:
         dest="disable_tools",
         metavar="TOOL_NAME",
         help="Disable a specific tool for scope resolution (can be repeated)",
+    )
+    auth_parser.add_argument(
+        "--show-credentials",
+        action="store_true",
+        default=False,
+        help="Print OAuth credentials (client ID, secret, refresh token) after authenticating",
     )
 
     # -- serve subcommand --
