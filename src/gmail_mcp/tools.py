@@ -243,7 +243,8 @@ ALL_TOOL_DEFINITIONS: dict[str, Tool] = {
         description=(
             "Create a draft email. The draft is saved in Gmail's Drafts "
             "folder and must be manually sent by the user. This tool "
-            "cannot send emails directly."
+            "cannot send emails directly. Supports plain text, markdown, "
+            "and raw HTML bodies via the body_format parameter."
         ),
         inputSchema={
             "type": "object",
@@ -259,12 +260,33 @@ ALL_TOOL_DEFINITIONS: dict[str, Tool] = {
                 "subject": {"type": "string"},
                 "body": {
                     "type": "string",
-                    "description": "Plain text email body",
+                    "description": (
+                        "Email body content. Interpretation depends on body_format:\n"
+                        "- plain: plain text, sent as text/plain\n"
+                        "- markdown: markdown source; rendered to HTML and sent as "
+                        "multipart/alternative (plain+html) so recipients get formatting\n"
+                        "- html: raw HTML; sent as multipart/alternative with an "
+                        "auto-generated plain fallback"
+                    ),
+                },
+                "body_format": {
+                    "type": "string",
+                    "enum": ["plain", "markdown", "html"],
+                    "default": "plain",
+                    "description": (
+                        "How to interpret the body field. Use 'markdown' for rich "
+                        "text replies with headers, lists, bold, links etc. Default is 'plain'."
+                    ),
                 },
                 "cc": {
                     "type": "array",
                     "items": {"type": "string"},
                     "description": "CC recipients (optional)",
+                },
+                "bcc": {
+                    "type": "array",
+                    "items": {"type": "string"},
+                    "description": "BCC recipients (optional)",
                 },
                 "reply_to_id": {
                     "type": "string",

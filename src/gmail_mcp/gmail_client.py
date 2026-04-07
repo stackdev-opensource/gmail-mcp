@@ -1,9 +1,12 @@
 """Gmail API wrapper for querying messages, threads, and labels."""
 
 import base64
+import email.mime.multipart
 import email.mime.text
 import logging
+import re
 
+import markdown as markdown_lib
 from google.oauth2.credentials import Credentials
 from googleapiclient.discovery import build
 
@@ -120,19 +123,42 @@ class GmailClient:
         subject: str,
         body: str,
         cc: list[str] | None = None,
+        bcc: list[str] | None = None,
         reply_to_id: str | None = None,
+        body_format: str = "plain",
     ) -> dict:
-        """Create a draft email. Does NOT send."""
-        message = email.mime.text.MIMEText(body)
+        """Create a draft email. Does NOT send.
+
+        Args:
+            to: Primary recipient email address.
+            subject: Email subject line.
+            body: Email body content. Interpretation depends on `body_format`.
+            cc: Optional list of CC recipients.
+            bcc: Optional list of BCC recipients.
+            reply_to_id: If replying, the original message ID for threading.
+            body_format: How to interpret `body`:
+                - "plain" (default) — plain text, sent as text/plain
+                - "markdown" — markdown source; converted to HTML and sent as
+                  multipart/alternative with both text/plain and text/html parts
+                - "html" — raw HTML; sent as multipart/alternative with an
+                  auto-generated text/plain fallback and the HTML as-is
+
+        Returns:
+            dict with `draft_id` and confirmation message.
+        """
+        message = self._build_mime_message(body, body_format)
         message["to"] = self._sanitize_header(to, "to")
         message["subject"] = self._sanitize_header(subject, "subject")
         if cc:
             for addr in cc:
                 self._sanitize_header(addr, "cc")
             message["cc"] = ", ".join(cc)
+        if bcc:
+            for addr in bcc:
+                self._sanitize_header(addr, "bcc")
+            message["bcc"] = ", ".join(bcc)
 
-        raw = base64.urlsafe_b64encode(message.as_bytes()).decode()
-        draft_body: dict = {"message": {"raw": raw}}
+        draft_body: dict = {"message": {}}
 
         if reply_to_id:
             # Fetch the original message to get threadId and headers for proper threading
@@ -156,12 +182,82 @@ class GmailClient:
                     message["References"] = header["value"]
                     break
 
-            # Re-encode after adding headers
-            raw = base64.urlsafe_b64encode(message.as_bytes()).decode()
-            draft_body["message"]["raw"] = raw
+        # Encode after all headers are set
+        raw = base64.urlsafe_b64encode(message.as_bytes()).decode()
+        draft_body["message"]["raw"] = raw
 
         result = self._service.users().drafts().create(userId="me", body=draft_body).execute()
-        return {"draft_id": result["id"], "message": "Draft created successfully"}
+        return {
+            "draft_id": result["id"],
+            "message": "Draft created successfully",
+            "body_format": body_format,
+        }
+
+    @staticmethod
+    def _build_mime_message(body: str, body_format: str):  # noqa: ANN205
+        """Build a MIME message from a body string based on the desired format.
+
+        - "plain": single-part text/plain
+        - "markdown": multipart/alternative with text/plain (source) + text/html (rendered)
+        - "html": multipart/alternative with text/plain (stripped fallback) + text/html (raw)
+        """
+        fmt = (body_format or "plain").lower()
+        if fmt not in {"plain", "markdown", "html"}:
+            raise ValueError(
+                f"Invalid body_format: {body_format!r}. Use 'plain', 'markdown', or 'html'."
+            )
+
+        if fmt == "plain":
+            return email.mime.text.MIMEText(body, "plain", "utf-8")
+
+        if fmt == "markdown":
+            # Render markdown → HTML with sensible defaults (tables, fenced code,
+            # sane line breaks so Gmail respects single newlines).
+            html_body = markdown_lib.markdown(
+                body,
+                extensions=["extra", "sane_lists", "nl2br"],
+                output_format="html",
+            )
+            plain_body = body  # keep the markdown source as the plain fallback
+        else:  # html
+            html_body = body
+            plain_body = GmailClient._html_to_plain(body)
+
+        # Wrap in multipart/alternative so Gmail clients that prefer plain text
+        # still get a readable version.
+        msg = email.mime.multipart.MIMEMultipart("alternative")
+        msg.attach(email.mime.text.MIMEText(plain_body, "plain", "utf-8"))
+        msg.attach(email.mime.text.MIMEText(html_body, "html", "utf-8"))
+        return msg
+
+    @staticmethod
+    def _html_to_plain(html: str) -> str:
+        """Very small HTML → plain text fallback (no external deps).
+
+        Good enough for generating a plain alternative part from simple HTML.
+        Not intended as a full HTML renderer.
+        """
+        # Drop script/style blocks entirely
+        text = re.sub(r"<(script|style)[^>]*>.*?</\1>", "", html, flags=re.DOTALL | re.IGNORECASE)
+        # Turn <br> and block-level close tags into newlines
+        text = re.sub(r"<br\s*/?>", "\n", text, flags=re.IGNORECASE)
+        text = re.sub(r"</(p|div|li|tr|h[1-6])>", "\n", text, flags=re.IGNORECASE)
+        text = re.sub(r"<li[^>]*>", "- ", text, flags=re.IGNORECASE)
+        # Strip remaining tags
+        text = re.sub(r"<[^>]+>", "", text)
+        # Decode a handful of common entities
+        text = (
+            text.replace("&nbsp;", " ")
+            .replace("&amp;", "&")
+            .replace("&lt;", "<")
+            .replace("&gt;", ">")
+            .replace("&quot;", '"')
+            .replace("&#39;", "'")
+        )
+        # Collapse excess whitespace
+        text = re.sub(r"[ \t]+\n", "\n", text)
+        text = re.sub(r"\n{3,}", "\n\n", text)
+        return text.strip()
 
     def create_label(self, name: str) -> dict:
         """Create a new label. Requires gmail.labels scope."""

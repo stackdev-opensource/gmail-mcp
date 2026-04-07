@@ -138,7 +138,9 @@ async def handle_create_draft(arguments: dict) -> list[TextContent]:
         subject=arguments["subject"],
         body=arguments["body"],
         cc=arguments.get("cc"),
+        bcc=arguments.get("bcc"),
         reply_to_id=arguments.get("reply_to_id"),
+        body_format=arguments.get("body_format", "plain"),
     )
     return [TextContent(type="text", text=json.dumps(result, indent=2))]
 
