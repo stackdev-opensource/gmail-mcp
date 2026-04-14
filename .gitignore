@@ -222,3 +222,4 @@ accounts.json
 # IDE
 .vscode/
 .idea/
+logs/
