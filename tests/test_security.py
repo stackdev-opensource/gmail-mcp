@@ -1,7 +1,11 @@
 """Tests for content sanitization and audit logging."""
 
+import json
 import logging
+import threading
+from unittest.mock import patch
 
+import gmail_mcp.security as security
 from gmail_mcp.security import log_tool_call, sanitize_email_content
 
 
@@ -81,3 +85,97 @@ class TestAuditLogging:
         # Keys are logged
         assert "email_id" in caplog.text
         # But no actual email ID value would appear (we only pass keys)
+
+    def test_no_http_post_when_endpoint_unset(self):
+        """Without GMAIL_MCP_AUDIT_ENDPOINT, no HTTP call should happen."""
+        with (
+            patch.object(security, "_AUDIT_ENDPOINT", ""),
+            patch.object(security, "_post_audit_event") as mock_post,
+        ):
+            log_tool_call("gmail_search", "user@example.com", ["query"])
+            mock_post.assert_not_called()
+
+    def test_rejects_non_http_schemes(self):
+        """file:// and other schemes must be rejected to prevent local-file reads."""
+        with (
+            patch.object(security, "_AUDIT_ENDPOINT", "file:///etc/passwd"),
+            patch("urllib.request.urlopen") as mock_urlopen,
+        ):
+            # Should not raise and should not attempt the request
+            security._post_audit_event({"server": "x", "tool": "y"})
+            mock_urlopen.assert_not_called()
+
+    def test_http_post_fires_in_daemon_thread_when_endpoint_set(self):
+        """With endpoint set, log_tool_call spawns a daemon thread to POST."""
+        captured: list[dict] = []
+
+        def fake_post(payload: dict) -> None:
+            captured.append(payload)
+
+        with patch.object(
+            security, "_AUDIT_ENDPOINT", "http://admin.local/api/audit"
+        ), patch.object(
+            security, "_AUDIT_SERVER_NAME", "gmail_test"
+        ), patch.object(security, "_post_audit_event", side_effect=fake_post):
+            log_tool_call("gmail_search", "user@example.com", ["account", "query"])
+            # Give the daemon thread a moment to run
+            for t in threading.enumerate():
+                if t.daemon and t is not threading.current_thread():
+                    t.join(timeout=1.0)
+
+        assert len(captured) == 1
+        event = captured[0]
+        assert event["server"] == "gmail_test"
+        assert event["tool"] == "gmail_search"
+        assert event["user"] == "user@example.com"
+        assert event["args"] == ["account", "query"]
+
+    def test_post_audit_event_swallows_network_errors(self):
+        """_post_audit_event must never raise, even when the endpoint is unreachable."""
+        with patch.object(
+            security, "_AUDIT_ENDPOINT", "http://nonexistent.invalid:9999/api/audit"
+        ):
+            # Should not raise
+            security._post_audit_event(
+                {"server": "x", "tool": "y", "user": "z", "args": []}
+            )
+
+    def test_post_audit_event_sends_json_payload(self):
+        """Verify the POST body is JSON-encoded with the right content type."""
+        captured = {}
+
+        class FakeResponse:
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *args):
+                return False
+
+            def read(self):
+                return b""
+
+        def fake_urlopen(req, timeout):
+            captured["url"] = req.full_url
+            captured["data"] = req.data
+            captured["headers"] = dict(req.headers)
+            captured["method"] = req.get_method()
+            return FakeResponse()
+
+        with patch.object(
+            security, "_AUDIT_ENDPOINT", "http://admin.local/api/audit"
+        ), patch("urllib.request.urlopen", side_effect=fake_urlopen):
+            security._post_audit_event(
+                {
+                    "server": "gmail_work",
+                    "tool": "gmail_search",
+                    "user": "a@b.com",
+                    "args": ["query"],
+                }
+            )
+
+        assert captured["url"] == "http://admin.local/api/audit"
+        assert captured["method"] == "POST"
+        assert captured["headers"].get("Content-type") == "application/json"
+        body = json.loads(captured["data"])
+        assert body["server"] == "gmail_work"
+        assert body["tool"] == "gmail_search"
